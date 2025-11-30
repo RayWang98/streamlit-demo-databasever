@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+venv/
+
+# 忽略 Streamlit 快取和環境設定
+.streamlit/
+
+# 忽略環境變數檔案 (包含您的 Supabase 密鑰)
+.env
+
+# 忽略 Pandas 產生的暫存檔
+.DS_Store
+
+# 忽略 Windows 系統檔案 (解決 desktop.ini 的問題!)
+desktop.ini
+*/desktop.ini
+
+# 忽略 OSMnx 或其他 GIS 可能產生的暫存資料夾
+# 如果您有單獨的資料資料夾，請將其加入
+data/

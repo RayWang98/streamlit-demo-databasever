@@ -12,10 +12,9 @@ venv/
 # 忽略 Pandas 產生的暫存檔
 .DS_Store
 
-# 忽略 Windows 系統檔案 (解決 desktop.ini 的問題!)
+# 忽略 Windows 系統檔案
 desktop.ini
 */desktop.ini
 
 # 忽略 OSMnx 或其他 GIS 可能產生的暫存資料夾
-# 如果您有單獨的資料資料夾，請將其加入
 data/

@@ -483,21 +483,18 @@ class streamlit_run_app:
             df_exhibitions = df_exhibitions[df_exhibitions['hallname'] == st.session_state['selected']]
             self._display_venue_grid(df_exhibitions)
             df_exhibitions = self._translate_date(df_exhibitions)
-            if st.button('◀ 返回場館列表'):
-                st.session_state['page_mode'] = 'home' # 切換回首頁
-                st.rerun() # 重新執行應用程式以立即切換頁面
 
 
         elif st.session_state['page_mode'] == 'exhibition_view':    
 
-            select_ven = st.session_state['selected']
+            select_ven = st.session_state['selected'] # 展覽資訊
             st.markdown(f'### 🗺️ **{select_ven}** 資訊')
             
             df_exhibitions = self._translate_date(df_exhibitions)
             st.markdown(f'{df_exhibitions[df_exhibitions['展覽名稱'] == select_ven]['網頁連結'].values[0]}')
             if st.button('◀ 返回展覽列表'):
-                st.session_state['page_mode'] = 'back' # 切換回展覽清單
-                st.session_state['last_page_hallname'] = df_exhibitions[df_exhibitions['展覽名稱'] == select_ven]['展館名稱'].unique().tolist()[0]
+                st.session_state['page_mode'] = 'map_view' # 切換回展覽清單
+                st.session_state['selected'] = df_exhibitions[df_exhibitions['展覽名稱'] == select_ven]['展館名稱'].unique().tolist()[0]
                 st.rerun() # 重新執行應用程式以立即切換頁面
             if not df_exhibitions.empty:
                 select_df = df_exhibitions[df_exhibitions['展覽名稱'] == select_ven] # 篩出
@@ -522,28 +519,8 @@ class streamlit_run_app:
                     with col_list:
                         
                         st.markdown(f'### 周邊展覽地圖')
-                        self._display_google_map(df_exhibitions, venue_name = df_exhibitions['展館名稱'].values[0], exhibition_name = select_ven ,map_height = 600)
+                        self._display_google_map(df_exhibitions, venue_name = select_df['展館名稱'].values[0], exhibition_name = select_ven ,map_height = 600)
                 
-            # if st.button('◀ 返回展覽列表'):
-            #     st.session_state['page_mode'] = 'back' # 切換回展覽清單
-            #     st.session_state['last_page_hallname'] = df_exhibitions[df_exhibitions['展覽名稱'] == select_ven]['展館名稱'].unique().tolist()[0]
-            #     st.rerun() # 重新執行應用程式以立即切換頁面
-
-
-
-        elif st.session_state['page_mode'] == 'back':   
-            if st.button('◀ 返回場館列表'):
-                st.session_state['page_mode'] = 'home' # 切換回首頁
-                st.rerun() # 重新執行應用程式以立即切換頁面
-            st.set_page_config(layout = 'wide', page_icon = '📊', page_title = st.session_state['selected']) # 設定 Streamlit 頁面標題和圖示，並設定為寬模式布局
-            st.markdown(f'# **:orange[{st.session_state['last_page_hallname']}]**')
-            st.markdown(f'> 目前日期 &ensp; {dt.datetime.today().strftime('%Y-%m-%d')}')
-            st.markdown(f'**{self.venue_introduction.get(st.session_state['last_page_hallname'])}**')
-            st.markdown('---')
-
-            df_exhibitions = df_exhibitions[df_exhibitions['hallname'] == st.session_state['last_page_hallname']]
-            self._display_venue_grid(df_exhibitions)
-            df_exhibitions = self._translate_date(df_exhibitions)
 
 
         else:

@@ -339,11 +339,11 @@ class streamlit_run_app:
 
         # 所有要呈現的列表
         if type(info) == pd.DataFrame:
-            src_dict = info[['title', 'img_url', 'overview']].to_dict('records')
+            src_dict = info[['展覽名稱', '圖片連結', '展覽介紹']].to_dict('records')
             for ids in src_dict:
-                all_venues.append(ids.get('title'))
-                image_url_dict[ids.get('title')] = ids.get('img_url')
-                hashtags_dict[ids.get('title')] = ids.get('overview')[:100] + '...'
+                all_venues.append(ids.get('展覽名稱'))
+                image_url_dict[ids.get('展覽名稱')] = ids.get('圖片連結')
+                hashtags_dict[ids.get('展覽名稱')] = ids.get('展覽介紹')[:100] + '...'
                 clicktext = r':ghost: 查看展覽說明'
                 page_mode = 'exhibition_view'
         else:
@@ -432,10 +432,6 @@ class streamlit_run_app:
         
     # Streamlit 應用程式主體
     def website_main(self):
-        # 🎯 使用 st.spinner 包裹耗時的數據載入步驟
-        with st.spinner('⏳ 正在從 Supabase 建立連線並讀取資料，請稍候...'): # 上下文管理器 (Context Manager)，用來在程式碼執行需要較長時間時，在螢幕上顯示一個旋轉的載入動畫（俗稱 Spinner）
-            df_exhibitions = self._connectsql_get_data()
-                    
 
         # 🎯 注入 CSS 以固定圖片高度
         st.markdown('''
@@ -471,6 +467,10 @@ class streamlit_run_app:
             st.markdown('---')
             
         elif st.session_state['page_mode'] == 'map_view':
+            # 🎯 使用 st.spinner 包裹耗時的數據載入步驟
+            with st.spinner('⏳ 正在從 Supabase 建立連線並讀取資料，請稍候...'): # 上下文管理器 (Context Manager)，用來在程式碼執行需要較長時間時，在螢幕上顯示一個旋轉的載入動畫（俗稱 Spinner）
+                df_exhibitions = self._connectsql_get_data()
+                df_exhibitions = self._translate_date(df_exhibitions)
             if st.button('◀ 返回場館列表'):
                 st.session_state['page_mode'] = 'home' # 切換回首頁
                 st.rerun() # 重新執行應用程式以立即切換頁面
@@ -480,17 +480,19 @@ class streamlit_run_app:
             st.markdown(f'**{self.venue_introduction.get(st.session_state['selected'])}**')
             st.markdown('---')
 
-            df_exhibitions = df_exhibitions[df_exhibitions['hallname'] == st.session_state['selected']]
+            df_exhibitions = df_exhibitions[df_exhibitions['展館名稱'] == st.session_state['selected']]
             self._display_venue_grid(df_exhibitions)
-            df_exhibitions = self._translate_date(df_exhibitions)
+            
 
 
         elif st.session_state['page_mode'] == 'exhibition_view':    
-
+            with st.spinner('⏳ 正在從 Supabase 建立連線並讀取資料，請稍候...'): # 上下文管理器 (Context Manager)，用來在程式碼執行需要較長時間時，在螢幕上顯示一個旋轉的載入動畫（俗稱 Spinner）
+                df_exhibitions = self._connectsql_get_data()
+                df_exhibitions = self._translate_date(df_exhibitions)
             select_ven = st.session_state['selected'] # 展覽資訊
             st.markdown(f'### 🗺️ **{select_ven}** 資訊')
             
-            df_exhibitions = self._translate_date(df_exhibitions)
+            
             st.markdown(f'{df_exhibitions[df_exhibitions['展覽名稱'] == select_ven]['網頁連結'].values[0]}')
             if st.button('◀ 返回展覽列表'):
                 st.session_state['page_mode'] = 'map_view' # 切換回展覽清單

@@ -18,3 +18,6 @@ desktop.ini
 
 # 忽略 OSMnx 或其他 GIS 可能產生的暫存資料夾
 data/
+
+01_前一版/
+src/

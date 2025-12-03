@@ -8,10 +8,12 @@ from streamlit_folium import st_folium # 導入用於在 Streamlit 中嵌入 Fol
 import folium # 導入 Folium 函式庫，用於創建互動式地圖
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
-from rapidfuzz import fuzz, process # 導入 rapidfuzz 函式庫，用於高效的模糊字串匹配 (取代 fuzzywuzzy)
+from rapidfuzz import fuzz, process # 導入 rapidfuzz 函式庫，用於高效的模糊字串匹配
 from streamlit.components.v1 import html
 import datetime as dt
 import json
+from rapidfuzz import fuzz, process # 導入 rapidfuzz 函式庫，用於高效的模糊字串匹配
+from typing import Dict, List # 資料格式定義
 
 
 class streamlit_run_app:  
@@ -54,9 +56,11 @@ class streamlit_run_app:
             '臺北市立美術館' : '#當代思辨 #經典建築'
             }
         if 'page_mode' not in st.session_state:
-            st.session_state['page_mode'] = "home" # 預設為首頁
+            st.session_state['page_mode'] = 'home' # 預設為首頁
         if 'selected' not in st.session_state:
-            st.session_state['selected'] = "None"
+            st.session_state['selected'] = 'None'
+
+
 
     @st.cache_data(ttl = 600)
     # 使用 Streamlit 的快取機制，避免每次互動都重新查詢資料庫
@@ -347,7 +351,7 @@ class streamlit_run_app:
                 clicktext = r':ghost: 查看展覽說明'
                 page_mode = 'exhibition_view'
         else:
-            all_venues = list(self.venue_image_urls.keys()) # 首頁用的 home
+            all_venues = list(info.keys()) # 首頁用的 home
             image_url_dict = self.venue_image_urls
             hashtags_dict = self.venue_hashtags
             clicktext = r'📍 查看展館中的展覽'
@@ -415,22 +419,147 @@ class streamlit_run_app:
         df['end_date'] = pd.to_datetime(df['end_date']).dt.strftime('%Y-%m-%d')
         df.columns = ['展館名稱', '展覽地點', '展覽名稱', '開始日期', '結束日期', '參觀時間', '票價', '緯度', '經度', '網頁連結', '圖片連結', '展覽介紹', '更新時間']
         return df
+    
+    # 展館、展覽搜尋功能 =====================================================================
+    def _search_fuzzy_wildcard(self, usr_input : str, searchlist : list) -> List[str]:
+        choices = [i.lower() for i in searchlist] # 要比對的清單
         
+        best_match = process.extract(usr_input.lower(), choices, limit = 3) # 模糊比對，選前三名出來；choices是用戶可選的場館列表
+        # 回傳 Tuple：("最佳匹配字串", 分數, 在清單中的 index)
+
+        score_threshold = 40 # 設定分數門檻
+        filtered_match_name = [i[0] for i in best_match if i[1] >= score_threshold] # 挑出符合門檻的，其他丟掉
+
+        if filtered_match_name:
+            return filtered_match_name
+        else:
+            return []
 
 
+    # 數據統計品質功能 =======================================================================
+    # 1. 資料缺失率 - 每個欄位缺少的數量、哪個展館通常不顯示資訊(是否跟展館性質有關係)等
+    # 2. 資料更新頻率統計 - 每次更新時間、每次更新數量
+    # 3. 新增展覽數、性質、位置等
+    # 4. 消失展覽數、性質、位置等
+    # 5. 展覽內容共同出現的詞彙數量，做成詞雲圖? 一眼看出當前熱門展覽主題
+    # 6. 如果會員功能有做出來，看**主題**蒐藏數量、男性vs女性、所在地點等分布狀況
+
+    # 7. 增加展館數量，提升資料數量
 
 
+    # 各session的頁面內容 ======================================================================
+    # Session home
+    def _home_session(self) -> None:
+        st.set_page_config(layout = 'wide', page_icon = '📊', page_title = self.config_ttile) # 設定 Streamlit 頁面標題和圖示，並設定為寬模式布局
+        st.markdown(f'# **:orange[{self.topic}]**')
+        st.markdown(f'> 目前日期 &ensp; {dt.datetime.today().strftime('%Y-%m-%d')}')
+        st.markdown(f'{self.sideprojectbrief}')
+        st.markdown('---')
+        col_search, _ = st.columns([2, 3]) # 讓搜尋欄位不佔滿整行
 
-
-
-
-
-
-
-
-
+        with col_search:
+            st.markdown('##### **:red[想去哪裡看展?&emsp;&emsp;直接輸入找更快喔!]**')
+            usr_input = st.text_input('搜尋展館', label_visibility='collapsed')
+        st.markdown('---')
+        filtered_venue_names = self._search_fuzzy_wildcard(usr_input, list(self.venue_image_urls.keys()))
         
-    # Streamlit 應用程式主體
+        if usr_input and filtered_venue_names != []:
+            st.markdown(filtered_venue_names)
+            st.markdown('## 🏛️ 您可能要找的展館')
+            filtered_venue_info = {
+                name : self.venue_image_urls[name] 
+                for name in filtered_venue_names 
+                if name in self.venue_image_urls
+            } # 轉換成dict，為了要傳入版面呈現的函數中
+            self._display_venue_grid(filtered_venue_info)
+        else:
+            if usr_input:
+                st.markdown('### 找不到輸入的展覽館耶...請重新輸入，或是從下面圖片中找找看~')
+                self._display_venue_grid(self.venue_image_urls)
+            else:
+                st.markdown('## 🏛️ 展覽場館一覽')
+                self._display_venue_grid(self.venue_image_urls)
+        
+        st.markdown('---')
+        
+    
+    # Session map_view
+    def _map_view_session(self) -> None:
+    # 🎯 使用 st.spinner 包裹耗時的數據載入步驟
+        with st.spinner('⏳ 正在建立連線並讀取資料，請稍候...'): # 上下文管理器 (Context Manager)，用來在程式碼執行需要較長時間時，在螢幕上顯示一個旋轉的載入動畫（俗稱 Spinner）
+            df_exhibitions = self._connectsql_get_data()
+            df_exhibitions = self._translate_date(df_exhibitions)
+        # 返回按鈕
+        if st.button('◀ 返回場館列表'):
+            st.session_state['page_mode'] = 'home' # 切換回首頁
+            st.rerun() # 重新執行應用程式以立即切換頁面
+        # 頁面內容
+        df_current_venue = df_exhibitions[df_exhibitions['展館名稱'] == st.session_state['selected']]
+        st.set_page_config(layout = 'wide', page_icon = '📊', page_title = st.session_state['selected']) # 設定 Streamlit 頁面標題和圖示，並設定為寬模式布局
+        st.markdown(f'# **:orange[{st.session_state['selected']}]**')
+        st.markdown(f'> 目前日期 &ensp; {dt.datetime.today().strftime('%Y-%m-%d')}')
+        st.markdown(f'**{self.venue_introduction.get(st.session_state['selected'])}**')
+        st.markdown('---')
+        col_search, _ = st.columns([2, 3]) # 讓搜尋欄位不佔滿整行
+
+        with col_search:
+            st.markdown('##### **:red[有沒有要搜尋的展覽?&emsp;&emsp;直接輸入找更快喔!]**')
+            usr_input = st.text_input('')
+            checklist = df_exhibitions[df_exhibitions['展館名稱'] == st.session_state['selected']]['展覽名稱'].unique().tolist()
+        st.markdown('---')
+        filtered_exhibition_names = self._search_fuzzy_wildcard(usr_input, checklist)
+        
+        if usr_input and filtered_exhibition_names != []:
+            df_display = df_current_venue[df_current_venue['展覽名稱'].isin(filtered_exhibition_names)]
+            self._display_venue_grid(df_display)
+        else:
+            if usr_input:
+                st.markdown('### 找不到輸入的展覽館耶...請重新輸入，或是從下面圖片中找找看~')
+                self._display_venue_grid(df_current_venue)
+            else:
+                self._display_venue_grid(df_current_venue)
+
+
+    # Session exhibition_view
+    def _exhibition_view_session(self) -> None:
+        with st.spinner('⏳ 正在建立連線並讀取資料，請稍候...'): # 上下文管理器 (Context Manager)，用來在程式碼執行需要較長時間時，在螢幕上顯示一個旋轉的載入動畫（俗稱 Spinner）
+                df_exhibitions = self._connectsql_get_data()
+                df_exhibitions = self._translate_date(df_exhibitions)
+        select_ven = st.session_state['selected'] # 展覽資訊
+        st.markdown(f'### 🗺️ **{select_ven}** 資訊')
+        
+        
+        st.markdown(f'{df_exhibitions[df_exhibitions['展覽名稱'] == select_ven]['網頁連結'].values[0]}')
+        if st.button('◀ 返回展覽列表'):
+            st.session_state['page_mode'] = 'map_view' # 切換回展覽清單
+            st.session_state['selected'] = df_exhibitions[df_exhibitions['展覽名稱'] == select_ven]['展館名稱'].unique().tolist()[0]
+            st.rerun() # 重新執行應用程式以立即切換頁面
+        if not df_exhibitions.empty:
+            select_df = df_exhibitions[df_exhibitions['展覽名稱'] == select_ven] # 篩出
+            img_src = select_df['圖片連結'].values[0]
+            st.markdown('---')
+            
+            if select_ven != '請選擇您感興趣的展覽 (預設顯示全部)':
+                col_map, col_list = st.columns([2, 3]) # 3/5 寬度給地圖, 2/5 寬度給清單
+
+                with col_map:
+                    
+                    infotext = []
+                    
+                    for loc in ['展覽地點', '展覽名稱', '開始日期', '結束日期', '參觀時間', '票價', '展覽介紹']:
+                        infotext.append(f'**:yellow[{loc}]** : {select_df[loc].values[0]}')
+                    
+                    st.markdown('\n\n'.join(infotext))
+                    st.image(image = img_src, caption = f'**{select_df['展覽名稱'].values[0]}**')
+
+                with col_list:
+                    
+                    st.markdown(f'### 周邊展覽地圖')
+                    # self._display_google_map(df_exhibitions, venue_name = select_df['展館名稱'].values[0], exhibition_name = select_ven ,map_height = 600)
+    # 各session的頁面內容 ======================================================================            
+
+   
+    # Streamlit 應用程式主體 ====================================================================================
     def website_main(self):
 
         # 🎯 注入 CSS 以固定圖片高度
@@ -452,78 +581,13 @@ class streamlit_run_app:
         ''', unsafe_allow_html = True)    
 
         if st.session_state['page_mode'] == 'home':
-            st.set_page_config(layout = 'wide', page_icon = '📊', page_title = self.config_ttile) # 設定 Streamlit 頁面標題和圖示，並設定為寬模式布局
-            st.markdown(f'# **:orange[{self.topic}]**')
-            st.markdown(f'> 目前日期 &ensp; {dt.datetime.today().strftime('%Y-%m-%d')}')
-            st.markdown(f'{self.sideprojectbrief}')
-            st.markdown('---')
-            
-            # ----------------------------------------------------
-            # A. 首頁視圖 (Home View)
-            # ----------------------------------------------------
-            st.markdown('## 🏛️ 展覽場館一覽')
-            self._display_venue_grid(self.venue_image_urls)
-            
-            st.markdown('---')
+            self._home_session()
             
         elif st.session_state['page_mode'] == 'map_view':
-            # 🎯 使用 st.spinner 包裹耗時的數據載入步驟
-            with st.spinner('⏳ 正在建立連線並讀取資料，請稍候...'): # 上下文管理器 (Context Manager)，用來在程式碼執行需要較長時間時，在螢幕上顯示一個旋轉的載入動畫（俗稱 Spinner）
-                df_exhibitions = self._connectsql_get_data()
-                df_exhibitions = self._translate_date(df_exhibitions)
-            if st.button('◀ 返回場館列表'):
-                st.session_state['page_mode'] = 'home' # 切換回首頁
-                st.rerun() # 重新執行應用程式以立即切換頁面
-            st.set_page_config(layout = 'wide', page_icon = '📊', page_title = st.session_state['selected']) # 設定 Streamlit 頁面標題和圖示，並設定為寬模式布局
-            st.markdown(f'# **:orange[{st.session_state['selected']}]**')
-            st.markdown(f'> 目前日期 &ensp; {dt.datetime.today().strftime('%Y-%m-%d')}')
-            st.markdown(f'**{self.venue_introduction.get(st.session_state['selected'])}**')
-            st.markdown('---')
-
-            df_exhibitions = df_exhibitions[df_exhibitions['展館名稱'] == st.session_state['selected']]
-            self._display_venue_grid(df_exhibitions)
+            self._map_view_session()
             
-
-
         elif st.session_state['page_mode'] == 'exhibition_view':    
-            with st.spinner('⏳ 正在建立連線並讀取資料，請稍候...'): # 上下文管理器 (Context Manager)，用來在程式碼執行需要較長時間時，在螢幕上顯示一個旋轉的載入動畫（俗稱 Spinner）
-                df_exhibitions = self._connectsql_get_data()
-                df_exhibitions = self._translate_date(df_exhibitions)
-            select_ven = st.session_state['selected'] # 展覽資訊
-            st.markdown(f'### 🗺️ **{select_ven}** 資訊')
-            
-            
-            st.markdown(f'{df_exhibitions[df_exhibitions['展覽名稱'] == select_ven]['網頁連結'].values[0]}')
-            if st.button('◀ 返回展覽列表'):
-                st.session_state['page_mode'] = 'map_view' # 切換回展覽清單
-                st.session_state['selected'] = df_exhibitions[df_exhibitions['展覽名稱'] == select_ven]['展館名稱'].unique().tolist()[0]
-                st.rerun() # 重新執行應用程式以立即切換頁面
-            if not df_exhibitions.empty:
-                select_df = df_exhibitions[df_exhibitions['展覽名稱'] == select_ven] # 篩出
-                img_src = select_df['圖片連結'].values[0]
-                st.markdown('---')
-                
-                # 3. 現在展覽名稱
-                
-                if select_ven != '請選擇您感興趣的展覽 (預設顯示全部)':
-                    col_map, col_list = st.columns([2, 3]) # 3/5 寬度給地圖, 2/5 寬度給清單
-
-                    with col_map:
-                        
-                        infotext = []
-                        
-                        for loc in ['展覽地點', '展覽名稱', '開始日期', '結束日期', '參觀時間', '票價', '展覽介紹']:
-                            infotext.append(f'**:yellow[{loc}]** : {select_df[loc].values[0]}')
-                        
-                        st.markdown('\n\n'.join(infotext))
-                        st.image(image = img_src, caption = f'**{select_df['展覽名稱'].values[0]}**')
-
-                    with col_list:
-                        
-                        st.markdown(f'### 周邊展覽地圖')
-                        self._display_google_map(df_exhibitions, venue_name = select_df['展館名稱'].values[0], exhibition_name = select_ven ,map_height = 600)
-                
-
+            self._exhibition_view_session()
 
         else:
             st.warning('資料庫連線失敗或沒有找到正在展出的展覽資料。請檢查錯誤訊息和連線字串。')

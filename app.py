@@ -468,7 +468,7 @@ class streamlit_run_app:
             
         elif st.session_state['page_mode'] == 'map_view':
             # 🎯 使用 st.spinner 包裹耗時的數據載入步驟
-            with st.spinner('⏳ 正在從 Supabase 建立連線並讀取資料，請稍候...'): # 上下文管理器 (Context Manager)，用來在程式碼執行需要較長時間時，在螢幕上顯示一個旋轉的載入動畫（俗稱 Spinner）
+            with st.spinner('⏳ 正在建立連線並讀取資料，請稍候...'): # 上下文管理器 (Context Manager)，用來在程式碼執行需要較長時間時，在螢幕上顯示一個旋轉的載入動畫（俗稱 Spinner）
                 df_exhibitions = self._connectsql_get_data()
                 df_exhibitions = self._translate_date(df_exhibitions)
             if st.button('◀ 返回場館列表'):
@@ -486,7 +486,7 @@ class streamlit_run_app:
 
 
         elif st.session_state['page_mode'] == 'exhibition_view':    
-            with st.spinner('⏳ 正在從 Supabase 建立連線並讀取資料，請稍候...'): # 上下文管理器 (Context Manager)，用來在程式碼執行需要較長時間時，在螢幕上顯示一個旋轉的載入動畫（俗稱 Spinner）
+            with st.spinner('⏳ 正在建立連線並讀取資料，請稍候...'): # 上下文管理器 (Context Manager)，用來在程式碼執行需要較長時間時，在螢幕上顯示一個旋轉的載入動畫（俗稱 Spinner）
                 df_exhibitions = self._connectsql_get_data()
                 df_exhibitions = self._translate_date(df_exhibitions)
             select_ven = st.session_state['selected'] # 展覽資訊

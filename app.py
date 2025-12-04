@@ -13,14 +13,21 @@ from streamlit.components.v1 import html
 import datetime as dt
 import json
 from rapidfuzz import fuzz, process # 導入 rapidfuzz 函式庫，用於高效的模糊字串匹配
-from typing import Dict, List # 資料格式定義
+from typing import Dict, List, Tuple # 資料格式定義
+from tag_analysis_module import geniai, ExhibitionKeyword
+from collections import Counter
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
 
 
 class streamlit_run_app:  
     def __init__(self):
         self.databasename = os.getenv('databasename')
+        self.databasename_tag = os.getenv('databasename_tag')
         self.DATABASE_URL = os.getenv('DATABASE_URL')
         self.SQLQUERY = f'select * from {self.databasename}'
+        self.SQLQUERY_TAG = f'select * from {self.databasename_tag}'
         self.config_ttile = '展覽雷達：雙北展覽空間與文化趨勢地圖_Demo'
         self.GOOGLEMAP = os.getenv('GOOGLE_MAPS_API_KEY')
         self.GOOGLEMAPID = os.getenv('GOOGLEMAPID')
@@ -38,13 +45,21 @@ class streamlit_run_app:
             '臺北市立美術館' : 'https://upload.wikimedia.org/wikipedia/commons/a/a4/Taipei_Fine_Arts_Museum_and_China_Eastern_aircraft_20120628.jpg',
             }
         self.venue_introduction = {
-            '松山文創園區': '''松山文創園區定位為「臺北市原創基地」，自2011年對外開放以來，肩負帶動城市原創力與軟實力的使命。園區前身為松山菸廠，保留了歷史建築，並規劃了「跨界實驗」、「創意學院」等五大創新策略。這裡作為國際級的文創聚落，致力於扶植原創人才，鼓勵創新與實驗性創作。園區提供從創業育成到品牌建立，從核心創作到商業運用的全流程支持，實現設計發想、測試製作到國際鏈結。松山文創園區已成為台灣重要的創意樞紐，民眾可在此平台參與藝術與原創，體驗無限的創意與活力。''',
-            '國立師大美術館': '''師大美術館承載自1947年以來國立臺灣師範大學師生與校友的美術創作實踐，典藏超過4000件藝術作品，是臺灣近代美術史的重要見證者。美術館以「典藏研究轉譯」、「美術當代策展」、「跨域參與共學」等為核心，旨在擁抱校園與社區，垂直連接不同世代與族群，並積極與國際交流藝術思維。標誌設計上，以獨特的建築形體為靈感，不對稱的三角形展現創新與突破，虛實相映的佈局則反映其訊息整合與開放性。美術館以書法墨色為基底的代表色彩，蘊含著東方文化的儒雅與師大綿延的人文素養，致力於傳承在地文化並與全球接軌。''',
-            '台北當代藝術館': '''台北當代藝術館館舍建築落成於1921年，原為日治時期的「建成尋常小學校」，後曾作為近五十年的台北市政府辦公廳舍，是驅動市政的神經中樞。1996年舊廈登錄為市定古蹟，並在古蹟再利用政策下，於2001年轉型為國內唯一的「台北當代藝術館」，與建成國中結合，創造了美術館與學校共用建物的先例。當代館位於歷史文化軸線的延展上，象徵帶動大同區再發展的新契機。作為台灣當代藝術的重要窗口，當代館自我期許推動多元風貌的藝術創作與展覽，激發民眾的新觀點和新思維，並為城市發展提供源源不絕的創意與活力。''',
-            '華山1914文化創意園區': '''華山1914文化創意園區前身是歷史悠久的酒廠。自2002年行政院將其納入「創意文化園區」計畫後，經歷整修，拆除圍牆，並修復古蹟與歷史建築。2007年由臺灣文創發展股份有限公司入主經營，正式以「華山1914文化創意園區」重新營運。園區秉持「一本大書、一個舞台、一種風景、一所學校」的理念，旨在將華山轉型為台灣文創旗艦基地。華山走過百年風華，積極接軌國際，透過結合文化資產活化與再生的概念，導入文化、創意、藝術與設計等元素，提供民眾一個集展覽、表演、休閒於一體的多元文化體驗空間。''',
-            '國立故宮博物院': '''國立故宮博物院典藏了匯集北平、熱河、瀋陽三處清宮的珍稀文物，是亞洲文物菁華與人類文化史上的瑰寶。故宮文物因緣際會來到臺灣，成為臺灣多元文化源流中極為重要的部分，肩負著承繼數千年中華文化之責。故宮致力於「深耕在地，邁向國際」的願景，施政原則聚焦在公共化、在地化、專業化、多元化、國際化及年輕化。近年來，故宮積極推動新故宮計畫，優化北部院區和南院空間設施，並以「參觀者本位之原則」提升整體服務品質，期盼強化其作為國際矚目博物館的專業與高度。''',
-            '富邦美術館': '''富邦美術館經歷近10年籌備，於2024年5月在台北市信義區開啟嶄新場域。美術館以「藝術每一天 Art Every Day」為本質，旨在傳遞藝術帶來的幸福與喜悅。美術館積極關注台灣與世界各地的藝術家，抱持開放、積極的態度推動藝術對話與交流。其展覽聚焦現當代藝術，以激發觀者想像為目標，為信義區這片商業核心地帶注入了重要的文化與創意元素。美術館以綠意環繞的設計，為市民提供了一個全新的、充滿熱情與想像力的藝術空間。''',
-            '臺北市立美術館' : '''本館肩負推動臺灣現當代藝術的保存、研究、發展與普及之使命，掌握全球趨勢、建立多元交流管道，提升普羅大眾對現當代藝術的認知與參與，促使臺灣現當代藝術發展臻至蓬勃，全民藝術涵養更加豐沛，以期形成具有美感修為及文化思辨力的當代社會。''',
+            '松山文創園區': '''松山文創園區自 2011 年開放，定位為「臺北市原創基地」，以培育原創人才與提升城市文創軟實力為目標。  
+            園區透過跨界實驗、共好平台、創意學院等策略，支持創作者從設計發想、實驗製作到品牌建立與國際連結，打造台灣重要的創意樞紐，民眾可在此體驗藝術與原創精神。''',
+            '國立師大美術館': '''師大美術館透過典藏研究與系列專題展覽，重現臺灣藝術發展史；辦理教育推廣與衍生活動，鼓勵創新教育與跨世代參與；  
+            結合學術資源，連結國際姊妹校，推動跨國合作，打造面向世界的藝術樞紐。''',
+            '台北當代藝術館': '''台北當代藝術館位於原臺北市政府舊廈，前身為日治時期建成小學。1996 年依古蹟再利用政策整建為當代藝術館，2001 年開館，採公辦民營模式經營，結合建成國中新校，成為國內首座以推廣當代藝術為宗旨的美術館。  
+            館內展覽促進國際對話、提升民眾文化視野，亦帶動大同區再發展，成為臺北市重要的當代藝術與文化樞紐。''',
+            '華山1914文化創意園區': '''華山1914文化創意產業園區位於臺北市中正區，前身為台北酒廠，為市定古蹟。  
+            自1999年改建為藝文展演園區，提供藝術展覽、音樂表演及文化活動場地，成為臺北西區重要的文化聚落。園區內亦設有餐廳、咖啡館、藝廊及展廳等商業設施，兼具文化與休閒功能。''',
+            '國立故宮博物院': '''國立故宮博物院，位於臺北士林，另設南部院區，是臺灣最具規模的博物館與漢學研究機構。  
+            前身為北京故宮博物院，1948 年遷臺，1965 年於現址復院。館藏近 70 萬件文物，涵蓋新石器時代至今，包含青銅器、名家書畫、古籍與官窯瓷器。  
+            展廳按文物類別編年展示，定期更換展品，並致力文化創意與數位博物館發展。''',
+            '富邦美術館': '''富邦美術館位於臺北信義區，由富邦藝術基金會於 2015 年規劃設立，館址在富邦信義 A25 總部大樓下方。全館五層、佔地 3,000 坪，擁有「水景展廳」、「日光展廳」及「星光展廳」三個展覽空間，運用自然光設計及多媒體展覽。  
+            開館首展與國際美術館合作，展出羅丹、常玉、朱沅芷及梵谷作品，並設有兒童工作坊與藝術商店，結合藝術展示與教育功能。''',
+            '臺北市立美術館' : '''臺北市立美術館（北美館）位於中山區花博公園美術園區，成立於 1983 年，是臺灣首座公立與當代美術館。  
+            自開館以來，北美館肩負保存、研究及推廣臺灣現當代藝術的使命，關注藝術發展並扶植人才，推動藝術教育與文化普及，提升全民審美、創造力與思辨能力，致力建構兼具全球視野與區域脈絡的當代藝術生態。''',
             }
         self.venue_hashtags = {
             '松山文創園區': '#文創基地 #設計展覽 #市集活動',
@@ -60,15 +75,23 @@ class streamlit_run_app:
         if 'selected' not in st.session_state:
             st.session_state['selected'] = 'None'
 
+        # 讀取資料
+        # 使用 st.spinner 包裹耗時的數據載入步驟
+        with st.spinner('⏳ 正在建立連線並讀取資料，請稍候...'): # 上下文管理器 (Context Manager)，用來在程式碼執行需要較長時間時，在螢幕上顯示一個旋轉的載入動畫（俗稱 Spinner）
+            df_exhibitions, df_tags = self._connectsql_get_data()
+            df_exhibitions = self._translate_date(df_exhibitions)
+
+            self.df_exhibitions = df_exhibitions
+            self.df_tags = df_tags
 
 
     @st.cache_data(ttl = 600)
     # 使用 Streamlit 的快取機制，避免每次互動都重新查詢資料庫
     # ttl=600 表示每 600 秒 (10 分鐘) 才重新查詢一次資料庫
-    def _connectsql_get_data(_self) -> pd.DataFrame:
+    def _connectsql_get_data(_self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         if not _self.DATABASE_URL:
             # st.error('錯誤：DATABASE_URL 環境變數未設定，無法連線。')
-            return pd.DataFrame()
+            return pd.DataFrame(), pd.DataFrame()
         
         try:
             # 1. 建立 SQLAlchemy 引擎
@@ -82,12 +105,17 @@ class streamlit_run_app:
                 df['lon'] = pd.to_numeric(df['lon'], errors='coerce')
                 df = df.dropna(subset=['lat', 'lon']) 
             
-            return df
+            df_tag = pd.read_sql_query(_self.SQLQUERY_TAG, engine)
+            df_tag['update_flg'] = pd.to_datetime(df_tag['update_flg'])
+            # df_tag['keywords'] = df_tag['keywords']
+
+
+            return df, df_tag
 
         except Exception as e:
             # st.error(f'❌ 讀取 Supabase 資料失敗，錯誤訊息: {e}')
             st.caption(f'{e}')
-            return pd.DataFrame()
+            return pd.DataFrame(), pd.DataFrame()
         
 
     def _display_google_map(self, df: pd.DataFrame, venue_name : str, exhibition_name : str, map_height: int = 700) -> None:
@@ -427,7 +455,7 @@ class streamlit_run_app:
         best_match = process.extract(usr_input.lower(), choices, limit = 3) # 模糊比對，選前三名出來；choices是用戶可選的場館列表
         # 回傳 Tuple：("最佳匹配字串", 分數, 在清單中的 index)
 
-        score_threshold = 40 # 設定分數門檻
+        score_threshold = 45 # 設定分數門檻
         filtered_match_name = [i[0] for i in best_match if i[1] >= score_threshold] # 挑出符合門檻的，其他丟掉
 
         if filtered_match_name:
@@ -437,6 +465,54 @@ class streamlit_run_app:
 
 
     # 數據統計品質功能 =======================================================================
+    def _generate_wordcloud_plot(self, keyword_series : pd.DataFrame) -> None:
+        # 1. 轉換為頻率字典 {詞彙: 頻率}
+        word_freq_dict = pd.Series(
+            keyword_series['出現次數'].values, 
+            index = keyword_series['Tag']
+        ).to_dict()
+
+        # 2. 定義中文停用詞
+        custom_stopwords = set([
+            '的', '是', '在', '與', '和', '展', '覽', '藝術', '作品', '設計', '活動',
+            '透過', '觀眾', '系列', '個', '由', '於', '為', '將', '年', '代', '日', '{', '}', ','
+        ])
+            
+        try:
+            # 4. 初始化 WordCloud 物件
+            font_path = font_manager.findfont('Microsoft JhengHei')
+            wordcloud = WordCloud(
+                font_path = font_path,
+                width = 2000, 
+                height = 600,
+                background_color = None,
+                mode = 'RGBA', # 設置為 RGBA 模式以支援透明度
+                max_words = 50,
+                # stopwords = custom_stopwords,
+                collocations = False,
+                prefer_horizontal = 0.9,
+                colormap = 'Paired'
+            ).generate_from_frequencies(word_freq_dict) # 注意：這裡使用 generate_from_frequencies
+
+            # 5. 使用 Matplotlib 繪圖
+            fig, ax = plt.subplots(figsize = (20, 15), facecolor = 'none') # facecolor='none' 透明
+
+            # 設定 Matplotlib 圖表和軸的背景為透明 (透明度 alpha = 0)
+            fig.patch.set_alpha(0)  # 圖表外框
+            ax.patch.set_alpha(0)   # 圖表繪製區塊
+
+            ax.imshow(wordcloud, interpolation ='bilinear')
+            ax.axis('off')
+            # ax.set_title('展覽熱門關鍵字趨勢 (AI Tagging)', fontsize=16)
+
+            # 6. 使用 Streamlit 顯示 Matplotlib 圖表
+            st.pyplot(fig)
+            plt.close(fig) # 關閉 Matplotlib 圖形，釋放記憶體
+
+        except Exception as e:
+            st.error(f'❌ 產生文字雲失敗: {e}')
+
+
     # 1. 資料缺失率 - 每個欄位缺少的數量、哪個展館通常不顯示資訊(是否跟展館性質有關係)等
     # 2. 資料更新頻率統計 - 每次更新時間、每次更新數量
     # 3. 新增展覽數、性質、位置等
@@ -444,28 +520,55 @@ class streamlit_run_app:
     # 5. 展覽內容共同出現的詞彙數量，做成詞雲圖? 一眼看出當前熱門展覽主題
     # 6. 如果會員功能有做出來，看**主題**蒐藏數量、男性vs女性、所在地點等分布狀況
 
+
+
     # 7. 增加展館數量，提升資料數量
 
 
     # 各session的頁面內容 ======================================================================
     # Session home
     def _home_session(self) -> None:
+        # 頁面基礎資訊
         st.set_page_config(layout = 'wide', page_icon = '📊', page_title = self.config_ttile) # 設定 Streamlit 頁面標題和圖示，並設定為寬模式布局
-        st.markdown(f'# **:orange[{self.topic}]**')
-        st.markdown(f'> 目前日期 &ensp; {dt.datetime.today().strftime('%Y-%m-%d')}')
-        st.markdown(f'{self.sideprojectbrief}')
-        st.markdown('---')
-        col_search, _ = st.columns([2, 3]) # 讓搜尋欄位不佔滿整行
-
-        with col_search:
-            st.markdown('##### **:red[想去哪裡看展?&emsp;&emsp;直接輸入找更快喔!]**')
-            usr_input = st.text_input('搜尋展館', label_visibility='collapsed')
-        st.markdown('---')
-        filtered_venue_names = self._search_fuzzy_wildcard(usr_input, list(self.venue_image_urls.keys()))
+        st.markdown(f'# **:orange[{self.topic}]**')    
         
+        
+        st.markdown('---')
+        
+        col_title, col_ai = st.columns([3, 2]) # 讓搜尋欄位不佔滿整行
+        with col_title:
+            # with row_h, row_t = st.rows([3, 1])
+            st.markdown(f'> 目前日期 &ensp; {dt.datetime.today().strftime('%Y-%m-%d')}')
+            st.markdown(f'{self.sideprojectbrief}')
+
+            # 用戶搜尋窗格
+            st.markdown('##### **:red[想去哪裡看展?&emsp;&emsp;直接輸入找更快喔!]**')
+            usr_input = st.text_input('搜尋展館', label_visibility = 'collapsed')
+            filtered_venue_names = self._search_fuzzy_wildcard(usr_input, list(self.venue_image_urls.keys())) #
+            
+            # 整理 - 展覽的熱門關鍵字
+            world_feq = []
+            world_cloud_select = self.df_tags['hallname'].isin(filtered_venue_names) if filtered_venue_names else self.df_tags['hallname'].isin(list(self.venue_image_urls.keys()))
+            df_tags_keywords = self.df_tags[world_cloud_select].copy(deep = True)
+            df_tags_keywords['keywords'] = df_tags_keywords['keywords'].str.replace(r'[{}]', '', regex = True).str.split(',')
+            for i in df_tags_keywords['keywords']:
+                world_feq.extend(i)
+            keyword_counts_series = pd.Series(world_feq, name = 'Tag').value_counts().reset_index(name = '出現次數').sort_values(by = '出現次數', ascending = False)
+        
+        with col_ai:
+            st.markdown('### **:yellow[🔥 展覽關鍵字熱門趨勢(AI Tagging)]**')
+            if not keyword_counts_series.empty:
+                self._generate_wordcloud_plot(keyword_counts_series)
+            else:
+                st.caption('（尚無關鍵字資料可供分析）')
+        st.markdown('---')
+        
+
+            
+            
         if usr_input and filtered_venue_names != []:
-            st.markdown(filtered_venue_names)
             st.markdown('## 🏛️ 您可能要找的展館')
+            st.info(f'**:yellow[🔥 全館前10大覽熱門關鍵字：]** {', '.join(keyword_counts_series['Tag'][:10].values)}')
             filtered_venue_info = {
                 name : self.venue_image_urls[name] 
                 for name in filtered_venue_names 
@@ -478,84 +581,106 @@ class streamlit_run_app:
                 self._display_venue_grid(self.venue_image_urls)
             else:
                 st.markdown('## 🏛️ 展覽場館一覽')
+                st.info(f'**:yellow[🔥 雙北展覽前10大熱門關鍵字：]** {', '.join(keyword_counts_series['Tag'][:10].values)}')
                 self._display_venue_grid(self.venue_image_urls)
+                
         
         st.markdown('---')
-        
+               
     
     # Session map_view
     def _map_view_session(self) -> None:
-    # 🎯 使用 st.spinner 包裹耗時的數據載入步驟
-        with st.spinner('⏳ 正在建立連線並讀取資料，請稍候...'): # 上下文管理器 (Context Manager)，用來在程式碼執行需要較長時間時，在螢幕上顯示一個旋轉的載入動畫（俗稱 Spinner）
-            df_exhibitions = self._connectsql_get_data()
-            df_exhibitions = self._translate_date(df_exhibitions)
         # 返回按鈕
         if st.button('◀ 返回場館列表'):
             st.session_state['page_mode'] = 'home' # 切換回首頁
             st.rerun() # 重新執行應用程式以立即切換頁面
         # 頁面內容
-        df_current_venue = df_exhibitions[df_exhibitions['展館名稱'] == st.session_state['selected']]
+        df_current_venue = self.df_exhibitions[self.df_exhibitions['展館名稱'] == st.session_state['selected']]
         st.set_page_config(layout = 'wide', page_icon = '📊', page_title = st.session_state['selected']) # 設定 Streamlit 頁面標題和圖示，並設定為寬模式布局
         st.markdown(f'# **:orange[{st.session_state['selected']}]**')
         st.markdown(f'> 目前日期 &ensp; {dt.datetime.today().strftime('%Y-%m-%d')}')
         st.markdown(f'**{self.venue_introduction.get(st.session_state['selected'])}**')
+        
         st.markdown('---')
-        col_search, _ = st.columns([2, 3]) # 讓搜尋欄位不佔滿整行
+
+        col_search, col_tag = st.columns([2, 3]) # 讓搜尋欄位不佔滿整行
 
         with col_search:
             st.markdown('##### **:red[有沒有要搜尋的展覽?&emsp;&emsp;直接輸入找更快喔!]**')
             usr_input = st.text_input('')
-            checklist = df_exhibitions[df_exhibitions['展館名稱'] == st.session_state['selected']]['展覽名稱'].unique().tolist()
+            checklist = self.df_exhibitions[self.df_exhibitions['展館名稱'] == st.session_state['selected']]['展覽名稱'].unique().tolist()
         st.markdown('---')
-        filtered_exhibition_names = self._search_fuzzy_wildcard(usr_input, checklist)
+
+
+        filtered_exhibition_names = self._search_fuzzy_wildcard(usr_input, checklist) # 用戶可能再找的展覽清單
+        # 整理 - 展覽的熱門關鍵字
+        world_feq = []
+        world_cloud_select = self.df_tags['title'].isin(filtered_exhibition_names) if filtered_exhibition_names else self.df_tags['title'].isin(checklist)
+        df_tags_keywords = self.df_tags[world_cloud_select].copy(deep = True)
+        df_tags_keywords['keywords'] = df_tags_keywords['keywords'].str.replace(r'[{}]', '', regex = True).str.split(',')
+        for i in df_tags_keywords['keywords']:
+            world_feq.extend(i)
+        keyword_counts_series = pd.Series(world_feq, name = 'Tag').value_counts().reset_index(name = '出現次數').sort_values(by = '出現次數', ascending = False)
+        hashtaglist = "`" + "` `".join(keyword_counts_series['Tag'].values) + "`"
         
         if usr_input and filtered_exhibition_names != []:
             df_display = df_current_venue[df_current_venue['展覽名稱'].isin(filtered_exhibition_names)]
+            st.markdown(f' **:yellow[🔥 展覽關鍵字：]** ***{hashtaglist}***')
             self._display_venue_grid(df_display)
         else:
             if usr_input:
                 st.markdown('### 找不到輸入的展覽館耶...請重新輸入，或是從下面圖片中找找看~')
                 self._display_venue_grid(df_current_venue)
             else:
+                st.markdown(f' **:yellow[🔥 展覽關鍵字：]** ***{hashtaglist}***')
                 self._display_venue_grid(df_current_venue)
+                
 
 
     # Session exhibition_view
     def _exhibition_view_session(self) -> None:
-        with st.spinner('⏳ 正在建立連線並讀取資料，請稍候...'): # 上下文管理器 (Context Manager)，用來在程式碼執行需要較長時間時，在螢幕上顯示一個旋轉的載入動畫（俗稱 Spinner）
-                df_exhibitions = self._connectsql_get_data()
-                df_exhibitions = self._translate_date(df_exhibitions)
         select_ven = st.session_state['selected'] # 展覽資訊
         st.markdown(f'### 🗺️ **{select_ven}** 資訊')
         
         
-        st.markdown(f'{df_exhibitions[df_exhibitions['展覽名稱'] == select_ven]['網頁連結'].values[0]}')
+        st.markdown(f'{self.df_exhibitions[self.df_exhibitions['展覽名稱'] == select_ven]['網頁連結'].values[0]}')
         if st.button('◀ 返回展覽列表'):
             st.session_state['page_mode'] = 'map_view' # 切換回展覽清單
-            st.session_state['selected'] = df_exhibitions[df_exhibitions['展覽名稱'] == select_ven]['展館名稱'].unique().tolist()[0]
+            st.session_state['selected'] = self.df_exhibitions[self.df_exhibitions['展覽名稱'] == select_ven]['展館名稱'].unique().tolist()[0]
             st.rerun() # 重新執行應用程式以立即切換頁面
-        if not df_exhibitions.empty:
-            select_df = df_exhibitions[df_exhibitions['展覽名稱'] == select_ven] # 篩出
+
+        # st.info(f'**:yellow[🔥 雙北展覽前10大熱門關鍵字：]** {', '.join(keyword_counts_series['Tag'][:10].values)}')
+        if not self.df_exhibitions.empty:
+            select_df = self.df_exhibitions[self.df_exhibitions['展覽名稱'] == select_ven] # 篩出
             img_src = select_df['圖片連結'].values[0]
             st.markdown('---')
-            
-            if select_ven != '請選擇您感興趣的展覽 (預設顯示全部)':
-                col_map, col_list = st.columns([2, 3]) # 3/5 寬度給地圖, 2/5 寬度給清單
+            # 整理 - 展覽的熱門關鍵字
+            world_feq = []
+            world_cloud_select = self.df_tags['title'].isin([select_ven])
+            df_tags_keywords = self.df_tags[world_cloud_select].copy(deep = True)
+            df_tags_keywords['keywords'] = df_tags_keywords['keywords'].str.replace(r'[{}]', '', regex = True).str.split(',')
+            for i in df_tags_keywords['keywords']:
+                world_feq.extend(i)
+            keyword_counts_series = pd.Series(world_feq, name = 'Tag').value_counts().reset_index(name = '出現次數').sort_values(by = '出現次數', ascending = False)
+            hashtaglist = "`" + "` `".join(keyword_counts_series['Tag'].values) + "`"
+            st.markdown(f' **:yellow[🔥 展覽關鍵字：]** ***{hashtaglist}***')
 
-                with col_map:
-                    
-                    infotext = []
-                    
-                    for loc in ['展覽地點', '展覽名稱', '開始日期', '結束日期', '參觀時間', '票價', '展覽介紹']:
-                        infotext.append(f'**:yellow[{loc}]** : {select_df[loc].values[0]}')
-                    
-                    st.markdown('\n\n'.join(infotext))
-                    st.image(image = img_src, caption = f'**{select_df['展覽名稱'].values[0]}**')
+            col_map, col_list = st.columns([2, 3]) # 3/5 寬度給地圖, 2/5 寬度給清單
 
-                with col_list:
-                    
-                    st.markdown(f'### 周邊展覽地圖')
-                    # self._display_google_map(df_exhibitions, venue_name = select_df['展館名稱'].values[0], exhibition_name = select_ven ,map_height = 600)
+            with col_map:
+                
+                infotext = []
+                
+                for loc in ['展覽地點', '展覽名稱', '開始日期', '結束日期', '參觀時間', '票價', '展覽介紹']:
+                    infotext.append(f'**:yellow[{loc}]** : {select_df[loc].values[0]}')
+                
+                st.markdown('\n\n'.join(infotext))
+                st.image(image = img_src, caption = f'**{select_df['展覽名稱'].values[0]}**')
+
+            with col_list:
+                
+                st.markdown(f'### 周邊展覽地圖')
+                # self._display_google_map(df_exhibitions, venue_name = select_df['展館名稱'].values[0], exhibition_name = select_ven ,map_height = 600)
     # 各session的頁面內容 ======================================================================            
 
    

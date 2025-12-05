@@ -14,7 +14,6 @@ import datetime as dt
 import json
 from rapidfuzz import fuzz, process # 導入 rapidfuzz 函式庫，用於高效的模糊字串匹配
 from typing import Dict, List, Tuple # 資料格式定義
-from tag_analysis_module import geniai, ExhibitionKeyword
 from collections import Counter
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
@@ -480,7 +479,7 @@ class streamlit_run_app:
             
         try:
             # 4. 初始化 WordCloud 物件
-            font_path = font_manager.findfont('Microsoft JhengHei')
+            font_path = 'fonts/NotoSansTC-Regular.ttf' # src/fonts/NotoSansTC-Regular.ttf
             wordcloud = WordCloud(
                 font_path = font_path,
                 width = 2000, 
@@ -680,7 +679,7 @@ class streamlit_run_app:
             with col_list:
                 
                 st.markdown(f'### 周邊展覽地圖')
-                # self._display_google_map(df_exhibitions, venue_name = select_df['展館名稱'].values[0], exhibition_name = select_ven ,map_height = 600)
+                self._display_google_map(self.df_exhibitions, venue_name = select_df['展館名稱'].values[0], exhibition_name = select_ven ,map_height = 600)
     # 各session的頁面內容 ======================================================================            
 
    
